@@ -4,6 +4,22 @@ import json
 from tqdm import tqdm
 import argparse
 
+def parse_youtube_link(link):
+    #https://youtu.be/ucbx9we6EHk
+    #https://www.youtube.com/watch?v=ucbx9we6EHk    
+    #https://www.youtube.com/v/ucbx9we6EHk
+    split_result=parse.urlsplit(link)
+    if split_result.netloc == 'youtu.be':
+        return split_result.path[1:]
+    elif split_result.netloc == 'www.youtube.com':
+        if split_result.path == '/watch':
+            return parse.parse_qs(split_result.query)['v'][0]
+        elif split_result.path[:3] == '/v/':
+            return split_result.path[3:]
+    
+    print("invalid link")
+
+
 def get_video_info(id):
     video_info_link="https://www.youtube.com/get_video_info?video_id={}".format(id)
     video_info=requests.get(video_info_link)
@@ -29,7 +45,12 @@ if __name__=='__main__':
     parser.add_argument("--chooseQuality", "-cq", help="Display all available video qualities and choose which to download", action='store_const',const=True,default=False)
     args = parser.parse_args()
 
-    video_info = get_video_info(args.video_id[0])
+
+    video_id=args.video_id[0]
+    if video_id[:5]=='https':
+        video_id = parse_youtube_link(video_id)
+    print("id: "+video_id)
+    video_info = get_video_info(video_id)
 
     options = video_info['streamingData']['formats']
     if args.chooseQuality:
