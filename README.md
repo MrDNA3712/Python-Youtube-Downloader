@@ -15,6 +15,9 @@ $ python videodownload.py https://www.youtube.com/watch?v=ucbx9we6EHk my_file_na
 ```
 The `-mp3` option allows to just download the audio and convert it to mp3.
 ```
-$ python videodownload.py https://www.youtube.com/watch?v=ucbx9we6EHk 
+$ python videodownload.py https://www.youtube.com/watch?v=ucbx9we6EHk -mp3
 ```
 The `-cq` option allows to choose the desired quality for the download. Default is the best quality availibe, though this creates larger files and therefore slower downloads.
+```
+$ python videodownload.py https://www.youtube.com/watch?v=ucbx9we6EHk -cq
+```
