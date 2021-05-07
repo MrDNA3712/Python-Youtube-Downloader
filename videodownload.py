@@ -1,8 +1,10 @@
 import requests
+import logging
 from urllib import parse
 import json
 from tqdm import tqdm
 import argparse
+import ffmpeg
 
 def parse_youtube_link(link):
     #https://youtu.be/ucbx9we6EHk
@@ -51,26 +53,93 @@ if __name__=='__main__':
         video_id = parse_youtube_link(video_id)
     print("id: "+video_id)
     video_info = get_video_info(video_id)
+    with open('video_info.json','w') as f:
+        json.dump(video_info,f)
 
-    options = video_info['streamingData']['formats']
+
+    formats = video_info['streamingData']['formats']
+    adaptive = video_info['streamingData']['adaptiveFormats']
+    options = formats + adaptive
     if args.chooseQuality:
         num = 1
         for option in options:
-            print(num +".\t"+ option['qualityLabel']+"\t"+option['mimeType'])
+            if "qualityLabel" in option:
+                print(str(num) +".\t"+ option['qualityLabel']+"\t"+option['mimeType'])
+            elif 'audioQuality' in option:
+                print(str(num) +".\t"+ option['audioQuality']+"\t"+option['mimeType'])
             num += 1
-        
-        auswahl = int(input('Selection: '))-1
-        if auswahl >= len(options) or auswahl < 0:
-            print("Not a vaild selection")
-    else:
-        print(options[-1]['qualityLabel']+"\t"+options[-1]['mimeType'])
-        auswahl = -1
+        invalid = True
+        while invalid:
+            invalid = False
+            i =input('Selection: ')
+            streams = []
+            auswahl = i.split('+')
+            for a in auswahl:
+                if int(a)-1 >= len(options) or int(a)-1 < 0:
+                    print("Not a vaild selection")
+                    invalid = True
+                else:
+                    streams.append(options[int(a)-1])
 
-    video_url = options[auswahl]['url']
+    else:
+        #print("auto selection")
+        auswahl = options[:1]
+        for option in options:
+            if 'qualityLabel' in option:
+                if int(option['qualityLabel'][:-1]) > int(auswahl[0]['qualityLabel'][:-1]):
+                    auswahl[0] = option
+        if -1 == auswahl[0]['mimeType'].find(','):
+            auswahl.append(None)
+            for option in options:
+                if 'audioQuality' in option:
+                    if None == auswahl[1]:
+                        auswahl[1] = option
+                    elif auswahl[1]['audioQuality'] == 'AUDIO_QUALITY_LOW' and option['audioQuality'] == 'AUDIO_QUALITY_MEDIUM':
+                        auswahl[1] = option
+        num = 1
+        for option in auswahl:
+            if "qualityLabel" in option:
+                print(str(num) +".\t"+ option['qualityLabel']+"\t"+option['mimeType'])
+            elif 'audioQuality' in option:
+                print(str(num) +".\t"+ option['audioQuality']+"\t"+option['mimeType'])
+            num += 1
+
+
     if args.video_filename == '':
         outfile = video_info['videoDetails']['title'] + '.mp4'
     elif len(args.video_filename) < 4 or not args.video_filename[-4:] == '.mp4':
         outfile=args.video_filename + '.mp4'
     else:
         outfile=args.video_filename
-    download(video_url,outfile)
+
+    if len(auswahl) == 2:
+        videofile = '.videodownload.tmp'
+        audiofile = '.audiodownload.tmp'
+        video, audio = auswahl
+        download(video['url'],videofile)
+        download(audio['url'],audiofile)
+        
+        video = ffmpeg.input(videofile)
+        audio = ffmpeg.input(audiofile)
+        ffmpeg.output(video['0'],audio['0'],outfile,vcodec='copy',acodec='copy').run(overwrite_output=True)
+    elif len(auswahl) > 2:
+        counter = 1
+        for video in auswahl:
+            video_url = video['url']
+            outfile = outfile[:-4]+str(counter)+'.mp4'
+            download(video_url,outfile)
+            counter += 1
+    else:
+        video_url = auswahl[0]['url']
+        
+        download(video_url,outfile)
+
+    # vcounter = 0
+    # acounter = 0
+    # for adapt in video_info['streamingData']['adaptiveFormats']:
+    #     if 'qualityLabel' in adapt  and adapt['qualityLabel'] == '1080p':
+    #         vcounter += 1
+    #         download(adapt['url'],outfile+'1080p_'+str(vcounter)+".mp4")
+    #     elif 'audioQuality' in adapt and adapt['audioQuality'] == 'AUDIO_QUALITY_MEDIUM':
+    #         acounter += 1
+    #         download(adapt['url'],outfile+'audio'+str(acounter)+".aac")
