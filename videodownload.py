@@ -90,14 +90,20 @@ class Video():
             if fmt > selection[0]:
                 selection[0]=fmt
         if not selection[0].has_audio and use_adaptive_formats:
-            selection.append(self.audio_formats[0])
+            selection.append(self.get_best_audio_stream())
+        return selection
+
+    def get_best_audio_stream(self):
+        if len(self.audio_formats) > 0:
+            selection = self.audio_formats[0]
             for fmt in self.audio_formats:
-                if fmt > selection[1]:
-                    selection[1]=fmt
-        return selection   
+                    if fmt > selection:
+                        selection = fmt
+            return selection
 
 
 def parse_youtube_link(link):
+    #can parse youtube links like this
     #https://youtu.be/ucbx9we6EHk
     #https://www.youtube.com/watch?v=ucbx9we6EHk    
     #https://www.youtube.com/v/ucbx9we6EHk
@@ -154,7 +160,7 @@ def select_best_streams(options):
     return auswahl
 
 
-def main(video,outputfile,interactive=False):
+def main(video,outputfile,interactive=False,mp3=False):
     youtube_video=Video(video)
 
     if interactive:
@@ -175,17 +181,25 @@ def main(video,outputfile,interactive=False):
                 else:
                     selection.append(youtube_video.all_formats[int(a)-1])
     else:
-        selection = youtube_video.get_best_streams()
+        if mp3:
+            selection = [youtube_video.get_best_audio_stream()]
+        else:
+            selection = youtube_video.get_best_streams()
     print("The following streams will be downloaded")
     for stream in selection:
         print(stream)
     
-    if outputfile == '':
-        outputfile = youtube_video.title + '.mp4'
-    elif len(args.video_filename) < 4 or not args.video_filename[-4:] == '.mp4':
-        outputfile=outputfile + '.mp4'
+    if mp3:
+        ending = '.mp3'
+    else:
+        ending = selection[0].file_ending
+    
+    if '' == outputfile:
+        outputfile = youtube_video.title + ending
+    elif len(args.video_filename) < 4 or not ending == args.video_filename[-4:]:
+        outputfile=outputfile + ending
 
-    if len(selection) == 2 and selection[0].has_video and selection[1].has_audio:
+    if 2 == len(selection) and selection[0].has_video and selection[1].has_audio:
         with tempfile.TemporaryDirectory() as tempdir:
             videofile = os.path.join(tempdir,'.videodownload.tmp')
             audiofile = os.path.join(tempdir,'.audiodownload.tmp')
@@ -196,13 +210,19 @@ def main(video,outputfile,interactive=False):
             video = ffmpeg.input(videofile)
             audio = ffmpeg.input(audiofile)
             ffmpeg.output(video['0'],audio['0'],outputfile,vcodec='copy',acodec='copy').run(quiet=True,overwrite_output=True)
-    elif len(selection) >= 2:
+    elif 2 <= len(selection):
         counter = 1
         for video in selection:
             video_url = video.url
             outputfile = outputfile[:-4]+str(counter)+'.mp4'
             download(video_url,outputfile)
             counter += 1
+    elif mp3:
+        with tempfile.TemporaryDirectory() as tempdir:
+            audiofile = os.path.join(tempdir,'.audiodownload.tmp')
+            download(selection[0].url,audiofile)
+            audio = ffmpeg.input(audiofile)
+            ffmpeg.output(audio,outputfile).run(quiet=True,overwrite_output=True)
     else:
         video_url = selection[0].url
         
@@ -214,6 +234,7 @@ if __name__=='__main__':
     parser.add_argument("video_id", help="The youtube video id",nargs=1)
     parser.add_argument("video_filename", help="Where the downloaded video will be saved",nargs='?', default='')
     parser.add_argument("--chooseQuality", "-cq", help="Display all available video qualities and choose which to download", action='store_const',const=True,default=False)
+    parser.add_argument("-mp3", help="Only download the audio and convert it to mp3", action='store_const',const=True,default=False)
     args = parser.parse_args()
 
 
@@ -221,5 +242,5 @@ if __name__=='__main__':
     if video_id[:5]=='https':
         video_id = parse_youtube_link(video_id)
     
-    main(video_id,args.video_filename,args.chooseQuality)
+    main(video_id,args.video_filename,args.chooseQuality,args.mp3)
   
